@@ -1,0 +1,15 @@
+# Needs a storage class that supports ReadWriteMany (e.g. EFS CSI driver on
+# EKS, Filestore CSI on GKE, Azure Files on AKS). Swap image_path in Job
+# records for an S3/GCS URI if you'd rather avoid RWX entirely.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tensorqueue-images
+  namespace: tensorqueue
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  # storageClassName: efs-sc

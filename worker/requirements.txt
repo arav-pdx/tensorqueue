@@ -1,0 +1,6 @@
+redis>=5.0
+pydantic>=2.5
+prometheus-client>=0.19
+torch>=2.2
+ultralytics>=8.1
+numpy>=1.26

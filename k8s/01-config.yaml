@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tensorqueue-config
+  namespace: tensorqueue
+data:
+  REDIS_HOST: "redis.tensorqueue.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  MAX_RETRIES: "5"
+  BASE_BACKOFF_SECONDS: "2"
+  MAX_BACKOFF_SECONDS: "300"
+  BACKOFF_JITTER_SECONDS: "1"
+  JOB_TTL_SECONDS: "86400"
+  PROCESSING_TIMEOUT_SECONDS: "60"
+  IMAGE_STORAGE_DIR: "/data/images"
+  MODEL_WEIGHTS: "yolov8n.pt"
+  MODEL_DEVICE: "cpu"          # set to "cuda" on GPU node pools
+  CONFIDENCE_THRESHOLD: "0.25"
+  WORKER_POLL_TIMEOUT_SECONDS: "5"
+  REQUEUE_SCAN_INTERVAL_SECONDS: "1.0"
+  METRICS_PORT: "9000"
+  LATENCY_WINDOW_SIZE: "2000"
+---
+# Placeholder — real deployments should create this via a secrets manager
+# (External Secrets Operator, Sealed Secrets, Vault) rather than committing
+# it. `kubectl create secret generic tensorqueue-secrets --from-literal=...`
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tensorqueue-secrets
+  namespace: tensorqueue
+type: Opaque
+stringData:
+  REDIS_PASSWORD: "changeme"

@@ -1,0 +1,4 @@
+pytest>=8.0
+fakeredis>=2.21
+requests>=2.31
+-e ./common

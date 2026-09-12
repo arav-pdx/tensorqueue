@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tensorqueue-api
+  namespace: tensorqueue
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: tensorqueue-api }
+  template:
+    metadata:
+      labels: { app: tensorqueue-api }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: api
+          image: ghcr.io/your-org/tensorqueue-api:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: { name: tensorqueue-config }
+            - secretRef: { name: tensorqueue-secrets }
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts:
+            - name: images
+              mountPath: /data/images
+      volumes:
+        - name: images
+          persistentVolumeClaim:
+            claimName: tensorqueue-images
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tensorqueue-api
+  namespace: tensorqueue
+spec:
+  selector: { app: tensorqueue-api }
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+# API is a thin, stateless I/O-bound gateway — CPU-based scaling on request
+# volume is sufficient here (unlike the worker, which scales on queue depth).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tensorqueue-api
+  namespace: tensorqueue
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tensorqueue-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 65 }

@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tensorqueue-worker
+  namespace: tensorqueue
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: tensorqueue-worker }
+  template:
+    metadata:
+      labels: { app: tensorqueue-worker }
+    spec:
+      terminationGracePeriodSeconds: 45  # give in-flight inference time to finish on SIGTERM
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: worker
+          image: ghcr.io/your-org/tensorqueue-worker:latest
+          ports:
+            - containerPort: 9000
+              name: metrics
+          envFrom:
+            - configMapRef: { name: tensorqueue-config }
+            - secretRef: { name: tensorqueue-secrets }
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits: { cpu: "2", memory: "2Gi" }
+            # For GPU node pools, add:
+            # limits: { nvidia.com/gpu: "1" }
+          volumeMounts:
+            - name: images
+              mountPath: /data/images
+      volumes:
+        - name: images
+          persistentVolumeClaim:
+            claimName: tensorqueue-images
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tensorqueue-worker-metrics
+  namespace: tensorqueue
+  labels: { app: tensorqueue-worker }
+spec:
+  selector: { app: tensorqueue-worker }
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: metrics
+---
+# Workers are compute-bound and their real scaling signal is *queue depth*,
+# not CPU — a burst of 500 images should scale out before CPU even climbs.
+# This requires the KEDA operator (https://keda.sh) and its redis-lists
+# scaler. Without KEDA installed, fall back to a plain HPA on CPU (see
+# tensorqueue-worker-hpa-cpu-fallback.yaml.txt at the bottom of the repo
+# README) — functionally correct, just slower to react to bursts.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: tensorqueue-worker-scaler
+  namespace: tensorqueue
+spec:
+  scaleTargetRef:
+    name: tensorqueue-worker
+  minReplicaCount: 2
+  maxReplicaCount: 20
+  cooldownPeriod: 120
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.tensorqueue.svc.cluster.local:6379
+        listName: tensorqueue:pending
+        listLength: "20"          # target: ~20 pending jobs per worker pod
+        activationListLength: "1"
+      authenticationRef:
+        name: tensorqueue-redis-auth
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: tensorqueue-redis-auth
+  namespace: tensorqueue
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: tensorqueue-secrets
+      key: REDIS_PASSWORD

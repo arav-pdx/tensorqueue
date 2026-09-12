@@ -1,0 +1,31 @@
+# Apply this INSTEAD of the KEDA ScaledObject in 30-worker.yaml if your
+# cluster doesn't have KEDA installed. CPU-based scaling is less responsive
+# to sudden queue bursts (a burst doesn't raise CPU until jobs are already
+# being processed) but requires nothing beyond the metrics-server most
+# clusters already run.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tensorqueue-worker-cpu
+  namespace: tensorqueue
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: tensorqueue-worker
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
